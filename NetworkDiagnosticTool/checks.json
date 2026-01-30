@@ -1,0 +1,27 @@
+{
+  "companyName": "Company A",
+  "autoRefreshSeconds": 30,
+  "minimizeToTray": true,
+  "showBalloonNotifications": true,
+  "checks": [
+    {
+      "name": "PBX VoIP",
+      "type": "tcp",
+      "host": "pbx.local",
+      "port": 5060,
+      "timeoutMs": 5000
+    },
+    {
+      "name": "CRM Portal",
+      "type": "http",
+      "url": "https://crm.company.com",
+      "timeoutMs": 10000
+    },
+    {
+      "name": "File Server",
+      "type": "ping",
+      "host": "fileserver.local",
+      "timeoutMs": 5000
+    }
+  ]
+}
