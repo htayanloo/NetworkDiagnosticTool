@@ -17,6 +17,11 @@ namespace NetworkDiagnosticTool.Models
         public string InterfaceType { get; set; }
         public long Speed { get; set; }
 
+        // WiFi specific
+        public bool IsWiFi { get; set; }
+        public string SSID { get; set; }
+        public int SignalQuality { get; set; }
+
         public NetworkInterfaceInfo()
         {
             DnsServers = new List<string>();

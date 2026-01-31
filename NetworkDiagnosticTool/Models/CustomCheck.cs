@@ -28,12 +28,13 @@ namespace NetworkDiagnosticTool.Models
             switch (Type?.ToLower())
             {
                 case "http":
-                    return Url;
+                    return Url ?? "N/A";
                 case "tcp":
-                    return $"{Host}:{Port}";
+                case "udp":
+                    return $"{Host ?? "unknown"}:{Port}";
                 case "ping":
                 default:
-                    return Host;
+                    return Host ?? "N/A";
             }
         }
 
@@ -47,6 +48,7 @@ namespace NetworkDiagnosticTool.Models
                 case "http":
                     return !string.IsNullOrWhiteSpace(Url);
                 case "tcp":
+                case "udp":
                     return !string.IsNullOrWhiteSpace(Host) && Port.HasValue && Port > 0 && Port <= 65535;
                 case "ping":
                     return !string.IsNullOrWhiteSpace(Host);

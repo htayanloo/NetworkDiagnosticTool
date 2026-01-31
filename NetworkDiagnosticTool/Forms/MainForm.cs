@@ -23,6 +23,13 @@ namespace NetworkDiagnosticTool.Forms
         private NetworkInterfaceInfo _selectedInterface;
         private List<CheckResult> _connectivityResults;
         private List<CheckResult> _serviceResults;
+        private Dictionary<string, ServiceCheckControls> _serviceCheckControls;
+
+        private class ServiceCheckControls
+        {
+            public StatusIndicator Indicator { get; set; }
+            public Label StatusLabel { get; set; }
+        }
 
         private Timer _autoRefreshTimer;
         private bool _isRefreshing = false;
@@ -52,6 +59,10 @@ namespace NetworkDiagnosticTool.Forms
         private Label _dns2Label;
         private Label _macLabel;
         private Label _speedLabel;
+        private Label _ssidLabelTitle;
+        private Label _ssidLabel;
+        private Label _signalLabelTitle;
+        private Label _signalLabel;
 
         private GroupBox _connectivityGroupBox;
         private Panel _connectivityResultsPanel;
@@ -63,7 +74,6 @@ namespace NetworkDiagnosticTool.Forms
         private Button _refreshButton;
         private Button _copyButton;
         private Button _exportButton;
-        private Button _configButton;
         private Label _lastUpdateLabel;
 
         private NotifyIcon _trayIcon;
@@ -78,6 +88,7 @@ namespace NetworkDiagnosticTool.Forms
 
             _connectivityResults = new List<CheckResult>();
             _serviceResults = new List<CheckResult>();
+            _serviceCheckControls = new Dictionary<string, ServiceCheckControls>();
 
             InitializeComponent();
             InitializeCustomComponents();
@@ -207,7 +218,7 @@ namespace NetworkDiagnosticTool.Forms
                 Font = new Font("Segoe UI", 10F, FontStyle.Bold),
                 ForeColor = Color.FromArgb(0, 102, 204),
                 Location = new Point(15, 195),
-                Size = new Size(600, 200),
+                Size = new Size(600, 220),
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
 
@@ -269,6 +280,18 @@ namespace NetworkDiagnosticTool.Forms
             var lblSpeed = CreateInfoLabel("Speed:", 20, 165, 100, regularFont);
             _speedLabel = CreateValueLabel("", 125, 165, 150, valueFont);
 
+            // WiFi specific labels
+            _ssidLabelTitle = CreateInfoLabel("SSID:", 280, 165, 60, regularFont);
+            _ssidLabel = CreateValueLabel("", 345, 165, 200, valueFont);
+            _signalLabelTitle = CreateInfoLabel("Signal:", 20, 190, 100, regularFont);
+            _signalLabel = CreateValueLabel("", 125, 190, 150, valueFont);
+
+            // Hide WiFi labels initially
+            _ssidLabelTitle.Visible = false;
+            _ssidLabel.Visible = false;
+            _signalLabelTitle.Visible = false;
+            _signalLabel.Visible = false;
+
             _networkGroupBox.Controls.AddRange(new Control[] {
                 _adapterComboBox, _networkStatusIndicator, _networkStatusLabel,
                 lblDhcp, _dhcpLabel,
@@ -278,7 +301,9 @@ namespace NetworkDiagnosticTool.Forms
                 lblMac, _macLabel,
                 lblDns1, _dns1Label,
                 lblDns2, _dns2Label,
-                lblSpeed, _speedLabel
+                lblSpeed, _speedLabel,
+                _ssidLabelTitle, _ssidLabel,
+                _signalLabelTitle, _signalLabel
             });
 
             this.Controls.Add(_networkGroupBox);
@@ -291,16 +316,16 @@ namespace NetworkDiagnosticTool.Forms
                 Text = "  CONNECTIVITY TESTS  ",
                 Font = new Font("Segoe UI", 10F, FontStyle.Bold),
                 ForeColor = Color.FromArgb(0, 102, 204),
-                Location = new Point(15, 405),
-                Size = new Size(600, 110),
+                Location = new Point(15, 425),
+                Size = new Size(600, 130),
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
 
             _connectivityResultsPanel = new Panel
             {
                 Location = new Point(10, 25),
-                Size = new Size(580, 75),
-                AutoScroll = true
+                Size = new Size(580, 100),
+                AutoScroll = false
             };
 
             _connectivityGroupBox.Controls.Add(_connectivityResultsPanel);
@@ -314,7 +339,7 @@ namespace NetworkDiagnosticTool.Forms
                 Text = "  SERVICE CHECKS  ",
                 Font = new Font("Segoe UI", 10F, FontStyle.Bold),
                 ForeColor = Color.FromArgb(0, 102, 204),
-                Location = new Point(15, 525),
+                Location = new Point(15, 565),
                 Size = new Size(600, 130),
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom
             };
@@ -384,20 +409,6 @@ namespace NetworkDiagnosticTool.Forms
             _exportButton.FlatAppearance.BorderSize = 0;
             _exportButton.Click += ExportButton_Click;
 
-            _configButton = new Button
-            {
-                Text = "Configure",
-                Size = new Size(100, 35),
-                Location = new Point(425, 17),
-                Font = buttonFont,
-                BackColor = Color.FromArgb(255, 193, 7),
-                ForeColor = Color.Black,
-                FlatStyle = FlatStyle.Flat,
-                Cursor = Cursors.Hand
-            };
-            _configButton.FlatAppearance.BorderSize = 0;
-            _configButton.Click += ConfigButton_Click;
-
             _lastUpdateLabel = new Label
             {
                 Text = "Last updated: Never",
@@ -409,7 +420,7 @@ namespace NetworkDiagnosticTool.Forms
             };
 
             _buttonPanel.Controls.AddRange(new Control[] {
-                _refreshButton, _copyButton, _exportButton, _configButton, _lastUpdateLabel
+                _refreshButton, _copyButton, _exportButton, _lastUpdateLabel
             });
 
             _buttonPanel.Resize += (s, e) =>
@@ -446,48 +457,63 @@ namespace NetworkDiagnosticTool.Forms
 
         private void SetupTrayIcon()
         {
-            _trayMenu = new ContextMenuStrip();
-            _trayMenu.Items.Add("Show", null, (s, e) => ShowFromTray());
-            _trayMenu.Items.Add("Refresh", null, async (s, e) => await RefreshAllAsync());
-            _trayMenu.Items.Add("-");
-            _trayMenu.Items.Add("Exit", null, (s, e) => ExitApplication());
-
-            _trayIcon = new NotifyIcon
+            try
             {
-                Text = "Network Diagnostic Tool",
-                ContextMenuStrip = _trayMenu,
-                Visible = false
-            };
+                _trayMenu = new ContextMenuStrip();
+                _trayMenu.Items.Add("Show", null, (s, e) => ShowFromTray());
+                _trayMenu.Items.Add("Refresh", null, async (s, e) => await RefreshAllAsync());
+                _trayMenu.Items.Add("-");
+                _trayMenu.Items.Add("Exit", null, (s, e) => ExitApplication());
 
-            // Use a simple icon (we'll create one programmatically)
-            _trayIcon.Icon = CreateSimpleIcon();
-            _trayIcon.DoubleClick += (s, e) => ShowFromTray();
+                _trayIcon = new NotifyIcon
+                {
+                    Text = "Network Diagnostic Tool",
+                    ContextMenuStrip = _trayMenu,
+                    Visible = false
+                };
+
+                // Use a simple icon (we'll create one programmatically)
+                _trayIcon.Icon = CreateSimpleIcon() ?? SystemIcons.Application;
+                _trayIcon.DoubleClick += (s, e) => ShowFromTray();
+            }
+            catch (Exception)
+            {
+                // Tray icon setup failed - continue without tray support
+                _trayIcon = null;
+            }
         }
 
         private Icon CreateSimpleIcon()
         {
-            using (var bmp = new Bitmap(16, 16))
-            using (var g = Graphics.FromImage(bmp))
+            try
             {
-                g.Clear(Color.Transparent);
-                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-                using (var brush = new SolidBrush(Color.FromArgb(0, 123, 255)))
+                using (var bmp = new Bitmap(16, 16))
+                using (var g = Graphics.FromImage(bmp))
                 {
-                    g.FillEllipse(brush, 1, 1, 14, 14);
+                    g.Clear(Color.Transparent);
+                    g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                    using (var brush = new SolidBrush(Color.FromArgb(0, 123, 255)))
+                    {
+                        g.FillEllipse(brush, 1, 1, 14, 14);
+                    }
+                    using (var pen = new Pen(Color.White, 2))
+                    {
+                        g.DrawLine(pen, 5, 8, 8, 11);
+                        g.DrawLine(pen, 8, 11, 12, 5);
+                    }
+                    return Icon.FromHandle(bmp.GetHicon());
                 }
-                using (var pen = new Pen(Color.White, 2))
-                {
-                    g.DrawLine(pen, 5, 8, 8, 11);
-                    g.DrawLine(pen, 8, 11, 12, 5);
-                }
-                return Icon.FromHandle(bmp.GetHicon());
+            }
+            catch (Exception)
+            {
+                return null;
             }
         }
 
         private void LoadConfiguration()
         {
-            _config = _configService.LoadConfiguration();
-            _companyLabel.Text = _config.CompanyName;
+            _config = _configService.LoadConfiguration() ?? AppConfiguration.CreateDefault();
+            _companyLabel.Text = _config.CompanyName ?? "Network Diagnostic Tool";
             _autoRefreshCheckbox.Checked = _config.AutoRefreshSeconds > 0;
         }
 
@@ -506,6 +532,8 @@ namespace NetworkDiagnosticTool.Forms
 
         private void UpdateAutoRefreshLabel()
         {
+            if (_autoRefreshLabel == null) return;
+
             if (_config?.AutoRefreshSeconds > 0)
             {
                 _autoRefreshLabel.Text = $"Every {_config.AutoRefreshSeconds}s";
@@ -674,6 +702,35 @@ namespace NetworkDiagnosticTool.Forms
                 _dns1Label.Text = "N/A";
                 _dns2Label.Text = "N/A";
             }
+
+            // WiFi info
+            if (_selectedInterface.IsWiFi)
+            {
+                _ssidLabelTitle.Visible = true;
+                _ssidLabel.Visible = true;
+                _signalLabelTitle.Visible = true;
+                _signalLabel.Visible = true;
+
+                _ssidLabel.Text = _selectedInterface.SSID ?? "N/A";
+                _signalLabel.Text = _selectedInterface.SignalQuality > 0
+                    ? $"{_selectedInterface.SignalQuality}%"
+                    : "N/A";
+
+                // Color code signal quality
+                if (_selectedInterface.SignalQuality >= 70)
+                    _signalLabel.ForeColor = Color.FromArgb(40, 167, 69);  // Green
+                else if (_selectedInterface.SignalQuality >= 40)
+                    _signalLabel.ForeColor = Color.FromArgb(255, 152, 0);  // Orange
+                else
+                    _signalLabel.ForeColor = Color.FromArgb(220, 53, 69);  // Red
+            }
+            else
+            {
+                _ssidLabelTitle.Visible = false;
+                _ssidLabel.Visible = false;
+                _signalLabelTitle.Visible = false;
+                _signalLabel.Visible = false;
+            }
         }
 
         private async Task RunConnectivityTestsAsync()
@@ -681,18 +738,28 @@ namespace NetworkDiagnosticTool.Forms
             _connectivityResults.Clear();
             _connectivityResultsPanel.Controls.Clear();
 
-            // DNS Resolution
-            var dnsResult = await _connectivityService.TestDnsResolution("google.com");
-            _connectivityResults.Add(dnsResult);
-
             // Gateway Ping
             var gateway = _selectedInterface?.Gateway;
             var gatewayResult = await _connectivityService.TestGatewayPing(gateway);
             _connectivityResults.Add(gatewayResult);
 
-            // Internet Check
-            var internetResult = await _connectivityService.TestInternetConnectivity();
-            _connectivityResults.Add(internetResult);
+            // International - Cloudflare
+            var cloudflareResult = await _connectivityService.PingHost("1.1.1.1");
+            cloudflareResult.Name = "International 1";
+            cloudflareResult.Target = "1.1.1.1";
+            _connectivityResults.Add(cloudflareResult);
+
+            // International - Quad9
+            var quad9Result = await _connectivityService.PingHost("9.9.9.9");
+            quad9Result.Name = "International 2";
+            quad9Result.Target = "9.9.9.9";
+            _connectivityResults.Add(quad9Result);
+
+            // Iran Network
+            var iranResult = await _connectivityService.PingHost("217.218.127.127");
+            iranResult.Name = "Iran Network";
+            iranResult.Target = "217.218.127.127";
+            _connectivityResults.Add(iranResult);
 
             UpdateConnectivityDisplay();
         }
@@ -700,7 +767,20 @@ namespace NetworkDiagnosticTool.Forms
         private async Task RunServiceChecksAsync()
         {
             _serviceResults.Clear();
-            _servicesResultsPanel.Controls.Clear();
+
+            // Initialize service check UI rows if not already done
+            if (_serviceCheckControls.Count == 0 && _config?.Checks != null)
+            {
+                InitializeServiceCheckRows();
+            }
+
+            // Set all to "Checking..." state
+            foreach (var kvp in _serviceCheckControls)
+            {
+                kvp.Value.Indicator.SetChecking();
+                kvp.Value.StatusLabel.Text = "Checking...";
+                kvp.Value.StatusLabel.ForeColor = Color.Gray;
+            }
 
             if (_config?.Checks != null)
             {
@@ -708,33 +788,112 @@ namespace NetworkDiagnosticTool.Forms
                 {
                     var result = await _connectivityService.ExecuteCustomCheck(check);
                     _serviceResults.Add(result);
+
+                    // Update the specific row's status
+                    ServiceCheckControls controls;
+                    if (_serviceCheckControls.TryGetValue(check.Name, out controls))
+                    {
+                        UpdateServiceCheckStatus(controls.Indicator, controls.StatusLabel, result);
+                    }
                 }
             }
-
-            UpdateServicesDisplay();
         }
 
-        private void UpdateConnectivityDisplay()
+        private void InitializeServiceCheckRows()
         {
-            UpdateResultsPanel(_connectivityResultsPanel, _connectivityResults);
-        }
+            _servicesResultsPanel.Controls.Clear();
+            _serviceCheckControls.Clear();
 
-        private void UpdateServicesDisplay()
-        {
-            UpdateResultsPanel(_servicesResultsPanel, _serviceResults);
-
-            if (_serviceResults.Count == 0)
+            if (_config?.Checks == null || !_config.Checks.Any(c => c.IsValid()))
             {
                 var noChecksLabel = new Label
                 {
-                    Text = "No service checks configured. Click Configure to add checks.",
+                    Text = "No service checks configured.",
                     Font = new Font("Segoe UI", 9F, FontStyle.Italic),
                     ForeColor = Color.Gray,
                     Location = new Point(5, 10),
                     AutoSize = true
                 };
                 _servicesResultsPanel.Controls.Add(noChecksLabel);
+                return;
             }
+
+            int y = 5;
+            foreach (var check in _config.Checks.Where(c => c.IsValid()))
+            {
+                var rowPanel = new Panel
+                {
+                    Location = new Point(0, y),
+                    Size = new Size(_servicesResultsPanel.Width - 20, 22),
+                    Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+                };
+
+                var indicator = new StatusIndicator
+                {
+                    Location = new Point(5, 3),
+                    Size = new Size(16, 16)
+                };
+                indicator.SetUnknown();
+
+                var nameLabel = new Label
+                {
+                    Text = check.Name ?? "Unknown",
+                    Location = new Point(28, 2),
+                    Size = new Size(150, 20),
+                    Font = new Font("Segoe UI", 9.5F, FontStyle.Regular)
+                };
+
+                var targetLabel = new Label
+                {
+                    Text = check.GetTarget(),
+                    Location = new Point(180, 2),
+                    Size = new Size(200, 20),
+                    Font = new Font("Segoe UI", 9F, FontStyle.Regular),
+                    ForeColor = Color.Gray
+                };
+
+                var statusLabel = new Label
+                {
+                    Text = "Pending",
+                    Location = new Point(390, 2),
+                    Size = new Size(100, 20),
+                    Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
+                    ForeColor = Color.Gray
+                };
+
+                rowPanel.Controls.AddRange(new Control[] { indicator, nameLabel, targetLabel, statusLabel });
+                _servicesResultsPanel.Controls.Add(rowPanel);
+
+                // Store references for later updates
+                _serviceCheckControls[check.Name] = new ServiceCheckControls { Indicator = indicator, StatusLabel = statusLabel };
+
+                y += 25;
+            }
+        }
+
+        private void UpdateServiceCheckStatus(StatusIndicator indicator, Label statusLabel, CheckResult result)
+        {
+            if (!result.Success)
+            {
+                indicator.SetFailure();
+                statusLabel.ForeColor = Color.FromArgb(220, 53, 69);
+            }
+            else if (result.Status == CheckStatus.Warning)
+            {
+                indicator.SetWarning();
+                statusLabel.ForeColor = Color.FromArgb(255, 152, 0);
+            }
+            else
+            {
+                indicator.SetSuccess();
+                statusLabel.ForeColor = Color.FromArgb(40, 167, 69);
+            }
+            statusLabel.Text = result.GetDisplayMessage();
+        }
+
+        private void UpdateConnectivityDisplay()
+        {
+            UpdateResultsPanel(_connectivityResultsPanel, _connectivityResults);
         }
 
         private void UpdateResultsPanel(Panel panel, List<CheckResult> results)
@@ -766,7 +925,7 @@ namespace NetworkDiagnosticTool.Forms
 
                 var nameLabel = new Label
                 {
-                    Text = result.Name,
+                    Text = result.Name ?? "Unknown",
                     Location = new Point(28, 2),
                     Size = new Size(150, 20),
                     Font = new Font("Segoe UI", 9.5F, FontStyle.Regular)
@@ -774,7 +933,7 @@ namespace NetworkDiagnosticTool.Forms
 
                 var targetLabel = new Label
                 {
-                    Text = result.Target,
+                    Text = result.Target ?? "N/A",
                     Location = new Point(180, 2),
                     Size = new Size(200, 20),
                     Font = new Font("Segoe UI", 9F, FontStyle.Regular),
@@ -863,19 +1022,6 @@ namespace NetworkDiagnosticTool.Forms
             }
         }
 
-        private void ConfigButton_Click(object sender, EventArgs e)
-        {
-            using (var configForm = new ConfigForm(_config, _configService))
-            {
-                if (configForm.ShowDialog(this) == DialogResult.OK)
-                {
-                    _config = configForm.Configuration;
-                    _companyLabel.Text = _config.CompanyName;
-                    UpdateAutoRefreshSettings();
-                }
-            }
-        }
-
         private void UpdateAutoRefreshSettings()
         {
             _autoRefreshTimer.Stop();
@@ -896,6 +1042,9 @@ namespace NetworkDiagnosticTool.Forms
 
         private void AutoRefreshCheckbox_CheckedChanged(object sender, EventArgs e)
         {
+            // Guard: timer and config may not be initialized yet during form setup
+            if (_autoRefreshTimer == null || _config == null) return;
+
             if (_autoRefreshCheckbox.Checked)
             {
                 if (_config.AutoRefreshSeconds <= 0)
@@ -914,14 +1063,15 @@ namespace NetworkDiagnosticTool.Forms
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            if (_config?.MinimizeToTray == true && e.CloseReason == CloseReason.UserClosing)
+            if (_config?.MinimizeToTray == true && _trayIcon != null && e.CloseReason == CloseReason.UserClosing)
             {
                 e.Cancel = true;
                 MinimizeToTray();
             }
             else
             {
-                _trayIcon.Visible = false;
+                if (_trayIcon != null)
+                    _trayIcon.Visible = false;
                 _autoRefreshTimer?.Stop();
             }
             base.OnFormClosing(e);
@@ -929,10 +1079,14 @@ namespace NetworkDiagnosticTool.Forms
 
         private void MinimizeToTray()
         {
+            if (_trayIcon == null) return;
             this.Hide();
             _trayIcon.Visible = true;
-            _trayIcon.ShowBalloonTip(1000, "Network Diagnostic Tool",
-                "Application minimized to system tray.", ToolTipIcon.Info);
+            if (_config?.ShowBalloonNotifications == true)
+            {
+                _trayIcon.ShowBalloonTip(1000, "Network Diagnostic Tool",
+                    "Application minimized to system tray.", ToolTipIcon.Info);
+            }
         }
 
         private void ShowFromTray()
@@ -940,13 +1094,16 @@ namespace NetworkDiagnosticTool.Forms
             this.Show();
             this.WindowState = FormWindowState.Normal;
             this.Activate();
-            _trayIcon.Visible = false;
+            if (_trayIcon != null)
+                _trayIcon.Visible = false;
         }
 
         private void ExitApplication()
         {
-            _config.MinimizeToTray = false; // Prevent minimize on close
-            _trayIcon.Visible = false;
+            if (_config != null)
+                _config.MinimizeToTray = false; // Prevent minimize on close
+            if (_trayIcon != null)
+                _trayIcon.Visible = false;
             Application.Exit();
         }
 
@@ -954,7 +1111,9 @@ namespace NetworkDiagnosticTool.Forms
         {
             base.OnResize(e);
 
-            // Adjust groupbox widths
+            // Adjust groupbox widths (check for null as this is called during initialization)
+            if (_computerGroupBox == null) return;
+
             var width = this.ClientSize.Width - 30;
             _computerGroupBox.Width = width;
             _networkGroupBox.Width = width;

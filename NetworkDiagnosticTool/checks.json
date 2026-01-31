@@ -1,27 +1,27 @@
 {
-  "companyName": "Company A",
+  "companyName": "HTB Tools",
   "autoRefreshSeconds": 30,
   "minimizeToTray": true,
   "showBalloonNotifications": true,
   "checks": [
     {
-      "name": "PBX VoIP",
-      "type": "tcp",
-      "host": "pbx.local",
+      "name": "PBX",
+      "type": "udp",
+      "host": "192.168.1.100",
       "port": 5060,
       "timeoutMs": 5000
     },
     {
-      "name": "CRM Portal",
+      "name": "CRM",
       "type": "http",
-      "url": "https://crm.company.com",
+      "url": "https://crm.example.com",
       "timeoutMs": 10000
     },
     {
-      "name": "File Server",
-      "type": "ping",
-      "host": "fileserver.local",
-      "timeoutMs": 5000
+      "name": "Portal",
+      "type": "http",
+      "url": "https://portal.example.com",
+      "timeoutMs": 10000
     }
   ]
 }

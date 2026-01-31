@@ -102,6 +102,13 @@ namespace NetworkDiagnosticTool.Services
                             .ToList();
 
                         interfaceInfo.IsDhcp = GetDhcpStatus(ni);
+
+                        // Check if WiFi
+                        if (ni.NetworkInterfaceType == NetworkInterfaceType.Wireless80211)
+                        {
+                            interfaceInfo.IsWiFi = true;
+                            GetWiFiInfo(interfaceInfo, ni.Name);
+                        }
                     }
                     catch (Exception)
                     {
@@ -187,6 +194,47 @@ namespace NetworkDiagnosticTool.Services
             }
 
             return false;
+        }
+
+        private void GetWiFiInfo(NetworkInterfaceInfo interfaceInfo, string interfaceName)
+        {
+            try
+            {
+                var startInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "netsh",
+                    Arguments = "wlan show interfaces",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    CreateNoWindow = true
+                };
+
+                using (var process = System.Diagnostics.Process.Start(startInfo))
+                {
+                    if (process == null) return;
+
+                    var output = process.StandardOutput.ReadToEnd();
+                    process.WaitForExit();
+
+                    // Parse SSID
+                    var ssidMatch = System.Text.RegularExpressions.Regex.Match(output, @"SSID\s*:\s*(.+)");
+                    if (ssidMatch.Success)
+                    {
+                        interfaceInfo.SSID = ssidMatch.Groups[1].Value.Trim();
+                    }
+
+                    // Parse Signal quality
+                    var signalMatch = System.Text.RegularExpressions.Regex.Match(output, @"Signal\s*:\s*(\d+)%");
+                    if (signalMatch.Success)
+                    {
+                        interfaceInfo.SignalQuality = int.Parse(signalMatch.Groups[1].Value);
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // Ignore WiFi info errors
+            }
         }
 
         private string FormatMacAddress(PhysicalAddress address)

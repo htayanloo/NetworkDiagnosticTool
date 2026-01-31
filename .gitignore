@@ -36,6 +36,6 @@ Desktop.ini
 # IDE
 *.idea/
 *.vscode/
-
+.claude
 # Test results
 TestResults/

@@ -58,7 +58,7 @@ namespace NetworkDiagnosticTool
         {
             if (ex == null) return;
 
-            var message = $"An unexpected error occurred:\n\n{ex.Message}\n\nWould you like to continue running the application?";
+            var message = $"An unexpected error occurred:\n\n{ex.Message}\n\nLocation: {ex.StackTrace?.Split('\n')[0]}\n\nWould you like to continue running the application?";
 
             var result = MessageBox.Show(
                 message,

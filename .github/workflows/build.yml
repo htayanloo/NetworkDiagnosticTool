@@ -25,22 +25,19 @@ jobs:
 
     - name: Restore NuGet packages
       run: nuget restore NetworkDiagnosticTool.sln
-      working-directory: NetworkDiagnosticTool
 
     - name: Build Release
       run: msbuild NetworkDiagnosticTool.sln /p:Configuration=Release /p:Platform="Any CPU" /verbosity:minimal
-      working-directory: NetworkDiagnosticTool
 
     - name: List build output
-      run: dir NetworkDiagnosticTool\NetworkDiagnosticTool\bin\Release\
-      working-directory: NetworkDiagnosticTool
+      run: dir NetworkDiagnosticTool\bin\Release\
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: NetworkDiagnosticTool
         path: |
-          NetworkDiagnosticTool/NetworkDiagnosticTool/bin/Release/NetworkDiagnosticTool.exe
+          NetworkDiagnosticTool/bin/Release/NetworkDiagnosticTool.exe
         if-no-files-found: error
 
     - name: Create Release
@@ -48,7 +45,7 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          NetworkDiagnosticTool/NetworkDiagnosticTool/bin/Release/NetworkDiagnosticTool.exe
+          NetworkDiagnosticTool/bin/Release/NetworkDiagnosticTool.exe
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

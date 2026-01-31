@@ -28,51 +28,8 @@ namespace NetworkDiagnosticTool.Services
 
         public AppConfiguration LoadConfiguration()
         {
-            try
-            {
-                // If external config doesn't exist, extract from embedded resource
-                if (!File.Exists(_configPath))
-                {
-                    ExtractEmbeddedConfig();
-                }
-
-                // If still doesn't exist (extraction failed), use default
-                if (!File.Exists(_configPath))
-                {
-                    return LoadFromEmbeddedResource() ?? AppConfiguration.CreateDefault();
-                }
-
-                var json = File.ReadAllText(_configPath, Encoding.UTF8);
-                return DeserializeJson<AppConfiguration>(json);
-            }
-            catch (Exception)
-            {
-                // Try loading from embedded resource as fallback
-                return LoadFromEmbeddedResource() ?? AppConfiguration.CreateDefault();
-            }
-        }
-
-        private void ExtractEmbeddedConfig()
-        {
-            try
-            {
-                var assembly = Assembly.GetExecutingAssembly();
-                using (var stream = assembly.GetManifestResourceStream(EmbeddedResourceName))
-                {
-                    if (stream != null)
-                    {
-                        using (var reader = new StreamReader(stream, Encoding.UTF8))
-                        {
-                            var content = reader.ReadToEnd();
-                            File.WriteAllText(_configPath, content, Encoding.UTF8);
-                        }
-                    }
-                }
-            }
-            catch (Exception)
-            {
-                // Ignore extraction errors - will fall back to default
-            }
+            // Always load from embedded resource only - no external file
+            return LoadFromEmbeddedResource() ?? AppConfiguration.CreateDefault();
         }
 
         private AppConfiguration LoadFromEmbeddedResource()
@@ -97,42 +54,6 @@ namespace NetworkDiagnosticTool.Services
                 // Ignore - will return null
             }
             return null;
-        }
-
-        public bool SaveConfiguration(AppConfiguration config)
-        {
-            try
-            {
-                var json = SerializeJson(config);
-                File.WriteAllText(_configPath, json, Encoding.UTF8);
-                return true;
-            }
-            catch (Exception)
-            {
-                return false;
-            }
-        }
-
-        public bool ConfigurationExists()
-        {
-            return File.Exists(_configPath);
-        }
-
-        public bool ResetToDefault()
-        {
-            try
-            {
-                if (File.Exists(_configPath))
-                {
-                    File.Delete(_configPath);
-                }
-                ExtractEmbeddedConfig();
-                return File.Exists(_configPath);
-            }
-            catch (Exception)
-            {
-                return false;
-            }
         }
 
         private string SerializeJson<T>(T obj)

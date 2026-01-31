@@ -452,17 +452,9 @@ namespace NetworkDiagnosticTool.Forms
                 MessageBox.Show(message, "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
 
-            // Save to file
-            if (_configService.SaveConfiguration(Configuration))
-            {
-                this.DialogResult = DialogResult.OK;
-                this.Close();
-            }
-            else
-            {
-                MessageBox.Show("Failed to save configuration file.", "Error",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
+            // Config is embedded - just close
+            this.DialogResult = DialogResult.OK;
+            this.Close();
         }
 
         private AppConfiguration CloneConfiguration(AppConfiguration source)

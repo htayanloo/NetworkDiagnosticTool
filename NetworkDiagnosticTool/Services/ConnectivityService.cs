@@ -27,24 +27,10 @@ namespace NetworkDiagnosticTool.Services
 
                     if (addresses != null && addresses.Length > 0)
                     {
-                        var ipv4 = Array.Find(addresses, a => a.AddressFamily == AddressFamily.InterNetwork);
-                        var resolvedIp = ipv4?.ToString() ?? addresses[0].ToString();
-                        var latency = stopwatch.ElapsedMilliseconds;
-
-                        if (latency > WarningLatencyMs)
-                        {
-                            return CheckResult.CreateWarning(
-                                "DNS Resolution",
-                                hostname,
-                                $"{hostname} → {resolvedIp}",
-                                latency);
-                        }
-
                         return CheckResult.CreateSuccess(
                             "DNS Resolution",
                             hostname,
-                            $"{hostname} → {resolvedIp}",
-                            latency);
+                            "OK");
                     }
 
                     return CheckResult.CreateFailure(
@@ -81,22 +67,10 @@ namespace NetworkDiagnosticTool.Services
 
                     if (reply.Status == IPStatus.Success)
                     {
-                        var latency = reply.RoundtripTime;
-
-                        if (latency > WarningLatencyMs)
-                        {
-                            return CheckResult.CreateWarning(
-                                "Ping",
-                                host,
-                                $"{latency}ms",
-                                latency);
-                        }
-
                         return CheckResult.CreateSuccess(
                             "Ping",
                             host,
-                            $"{latency}ms",
-                            latency);
+                            "OK");
                     }
 
                     return CheckResult.CreateFailure(
@@ -142,22 +116,10 @@ namespace NetworkDiagnosticTool.Services
 
                         if (client.Connected)
                         {
-                            var latency = stopwatch.ElapsedMilliseconds;
-
-                            if (latency > WarningLatencyMs)
-                            {
-                                return CheckResult.CreateWarning(
-                                    "TCP Port",
-                                    target,
-                                    $"{latency}ms",
-                                    latency);
-                            }
-
                             return CheckResult.CreateSuccess(
                                 "TCP Port",
                                 target,
-                                "OK",
-                                latency);
+                                "OK");
                         }
                     }
 
@@ -219,20 +181,10 @@ namespace NetworkDiagnosticTool.Services
 
                         if (statusCode >= 200 && statusCode < 400)
                         {
-                            if (latency > WarningLatencyMs)
-                            {
-                                return CheckResult.CreateWarning(
-                                    "HTTP",
-                                    url,
-                                    $"{statusCode} ({latency}ms)",
-                                    latency);
-                            }
-
                             return CheckResult.CreateSuccess(
                                 "HTTP",
                                 url,
-                                $"{statusCode} OK",
-                                latency);
+                                "OK");
                         }
 
                         return CheckResult.CreateFailure(
@@ -296,6 +248,12 @@ namespace NetworkDiagnosticTool.Services
                     result.Target = $"{check.Host}:{check.Port}";
                     break;
 
+                case "udp":
+                    result = await TestUdpPort(check.Host, check.Port ?? 5060, check.TimeoutMs);
+                    result.Name = check.Name;
+                    result.Target = $"{check.Host}:{check.Port}";
+                    break;
+
                 case "http":
                     result = await TestHttpEndpoint(check.Url, check.TimeoutMs);
                     result.Name = check.Name;
@@ -312,6 +270,55 @@ namespace NetworkDiagnosticTool.Services
             }
 
             return result;
+        }
+
+        public async Task<CheckResult> TestUdpPort(string host, int port, int timeoutMs = DefaultTimeoutMs)
+        {
+            var target = $"{host}:{port}";
+
+            try
+            {
+                using (var client = new UdpClient())
+                {
+                    client.Client.ReceiveTimeout = timeoutMs;
+                    client.Client.SendTimeout = timeoutMs;
+
+                    // Send a SIP OPTIONS request (common for SIP/VoIP)
+                    var sipRequest = System.Text.Encoding.ASCII.GetBytes(
+                        $"OPTIONS sip:{host} SIP/2.0\r\n" +
+                        $"Via: SIP/2.0/UDP {host}:{port}\r\n" +
+                        "Max-Forwards: 70\r\n" +
+                        $"To: <sip:{host}>\r\n" +
+                        $"From: <sip:test@test.local>;tag=test\r\n" +
+                        "Call-ID: test@localhost\r\n" +
+                        "CSeq: 1 OPTIONS\r\n" +
+                        "Content-Length: 0\r\n\r\n");
+
+                    await client.SendAsync(sipRequest, sipRequest.Length, host, port);
+
+                    // Try to receive a response
+                    var receiveTask = client.ReceiveAsync();
+                    if (await Task.WhenAny(receiveTask, Task.Delay(timeoutMs)) == receiveTask)
+                    {
+                        var response = await receiveTask;
+                        if (response.Buffer != null && response.Buffer.Length > 0)
+                        {
+                            return CheckResult.CreateSuccess("UDP", target, "OK");
+                        }
+                    }
+
+                    // If no response but no error, consider it OK (some UDP services don't respond)
+                    return CheckResult.CreateSuccess("UDP", target, "OK");
+                }
+            }
+            catch (SocketException)
+            {
+                return CheckResult.CreateFailure("UDP", target, "FAIL", "Port unreachable");
+            }
+            catch (Exception ex)
+            {
+                return CheckResult.CreateFailure("UDP", target, "FAIL", ex.Message);
+            }
         }
 
         public async Task<CheckResult> TestGatewayPing(string gatewayIp)
